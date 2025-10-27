@@ -1,17 +1,19 @@
 from torch import Tensor, nn
 from transformers import BertConfig, BertModel
 import torch
+import h5py
 
-class HierarchicalXRayQformer(nn.Module):
+class HierarchicalXRayQformer(nn.Module):   
     def __init__(
             self,
             num_queries=32,
             hidden_dim=768,
-            num_layers=4,
-            num_heads=8,
+            num_layers=6,
+            num_heads=12,
             intermediate_size=3072,
     ):
         super().__init__()
+        self.hidden_dim=hidden_dim
         self.q_former_conv3_4 = self._create_qformer(
             num_queries, 256, hidden_dim, num_layers, num_heads, intermediate_size
         )
@@ -27,7 +29,7 @@ class HierarchicalXRayQformer(nn.Module):
     def _create_qformer(self, num_queries, input_dim, hidden_dim, num_layers, num_heads, intermediate_size):
         query_tokens = nn.Parameter(torch.randn(1, num_queries, hidden_dim) * 0.02)
         config = BertConfig(
-            hidden_size=hidden_dim,
+            hidden_size=hidden_dim, 
             num_hidden_layers=num_layers,
             num_attention_heads=num_heads,
             intermediate_size=intermediate_size,
@@ -72,27 +74,31 @@ class HierarchicalXRayQformer(nn.Module):
 
         return query_output # (B, num_queries, hidden_dim)
     
-    def forward(self, vgg_features):
+    def forward(self, hdf5_file_path):
         """
         args: 
-            vgg_features : dict with 'conv3_4', 'conv4_4', 'conv5_4'
+            vgg_features : hdf5 file with 3 datasets : 'conv3_4', 'conv4_4', 'conv5_4'
         outputs:
             Merged queries for the LLM : (B, merged_queries, hidden_dim)
         """
+        with h5py.File(hdf5_file_path, 'r') as hf:
+            vgg_conv3_4_features = hf.get('conv3_4_features')
+            vgg_conv4_4_features = hf.get('conv4_4_features')
+            vgg_conv5_4_features = hf.get('conv5_4_features')
         queries_conv3 = self.process_single_scale(
-            vgg_features['conv3_4'],
+            vgg_conv3_4_features,
             self.qformer_conv3,
             self.proj_conv3
         )  # (B, 32, 768)
         
         queries_conv4 = self.process_single_scale(
-            vgg_features['conv4_4'],
+            vgg_conv4_4_features,
             self.qformer_conv4,
             self.proj_conv4
         )  # (B, 32, 768)
         
         queries_conv5 = self.process_single_scale(
-            vgg_features['conv5_4'],
+            vgg_conv5_4_features,
             self.qformer_conv5,
             self.proj_conv5
         )  # (B, 32, 768)

@@ -3,7 +3,6 @@ import os
 import torch 
 from PIL import Image
 from torchvision import transforms
-import numpy as np
 import glob
 
 import sys
@@ -12,7 +11,7 @@ from models.vgg_net.features_extractor import VGG19
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 BATCH_SIZE = 100
-DATASET_PATH = "/root/.cache/kagglehub/datasets/zainabhalhoul/mimic-dataset/versions/1"
+DATASET_PATH = ""
 
 vgg_net = VGG19().to(device)
 vgg_net.eval()
