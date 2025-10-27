@@ -76,9 +76,9 @@ class LLMEmbedder(nn.Module):
     def __init__(self, config):
         super(LLMEmbedder, self).__init__()
         # loading the tokenizer and model
-        self.tokenizer = AutoTokenizer.from_pretrained(config["LANGUAGE_ENCODER_NAME"])
-        self.model = AutoModel.from_pretrained(config["LANGUAGE_ENCODER_NAME"])
-        self.max_length = config["MAX_REPORT_LENGTH"]
+        self.tokenizer = AutoTokenizer.from_pretrained(config.LANGUAGE_ENCODER_NAME)
+        self.model = AutoModel.from_pretrained(config.LANGUAGE_ENCODER_NAME)
+        self.max_length = config.MAX_REPORT_LENGTH
         self.model.to(device)
         self.model.eval()
         #parameters freezing 
@@ -91,9 +91,10 @@ class LLMEmbedder(nn.Module):
         outputs : (batch_size, hidden_dim)
         """
         inputs = self.tokenizer(
-            texts=True,
-            trunction=True,
-            max_length=self.max_legnth,
+            texts,
+            padding=True,
+            truncation=True,
+            max_length=self.max_length,
             return_tensors='pt'
         )
         inputs = {k: v.to(device) for k, v in inputs.items()}

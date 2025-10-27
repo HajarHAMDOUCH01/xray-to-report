@@ -1,14 +1,22 @@
+import torch
+from pathlib import Path
 
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 DATA_ROOT = ""  
 OUTPUT_DIR = "./temp_batches"  
 
 
-LANGUAGE_ENCODER_NAME = "emilyalsentzer/Bio_ClinicalBERT"
+LLM_MODEL_NAME = "emilyalsentzer/Bio_ClinicalBERT"
 
 # Processing parameters
+# 30632 
+TOTAL_SAMPLES = 2000
 BATCH_SIZE = 1000  
-MINI_BATCH_SIZE = 16  
+START_IDX = 0
+END_IDX = 1999
+MINI_BATCH_SIZE = 32  
 NUM_WORKERS = 4 
+PREFETCH_FACTOR = 2
 UPLOAD_EVERY_N_BATCHES = 5  
 
 # Model configurations
@@ -26,3 +34,5 @@ EXPECTED_SHAPES = {
     'conv5_4': (512, 14, 14),
     'report_embeddings': (768,)  
 }
+
+NUM_BATCHES = TOTAL_SAMPLES // BATCH_SIZE

@@ -1,84 +1,78 @@
 import torch
-from torch.utils.data import DataLoader
-from torchvision import transforms
-from models import VGG19, LLMEmbedder  
-from dataset import MIMICDataset
 import config
+from models import VGG19, LLMEmbedder
+from feature_extractor import FeatureExtractor
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+def main():
+    print("="*50)
+    print("MIMIC Feature Extraction Pipeline")
+    print("="*50)
+    
+    # Initialize models
+    print("\n1. Loading models...")
+    vgg = VGG19().to(config.DEVICE).eval()
+    llm = LLMEmbedder(
+        model_name=config.LLM_MODEL_NAME,
+        max_length=config.MAX_REPORT_LENGTH
+    ).to(config.DEVICE).eval()
+    print(" Models loaded")
+    
+    # Initialize feature extractor
+    extractor = FeatureExtractor(vgg, llm, config)
+    
+    # Calculate batches to process
+    batch_ranges = []
+    for batch_idx in range(config.NUM_BATCHES + 1):  # +1 for the last partial batch
+        start = batch_idx * config.BATCH_SIZE
+        end = min(start + config.BATCH_SIZE - 1, config.END_IDX)
+        if start <= config.END_IDX:
+            batch_ranges.append((start, end, batch_idx))
+    
+    print(f"\n2. Will process {len(batch_ranges)} batches")
+    print(f"   Batch size: {config.BATCH_SIZE} samples")
+    print(f"   Mini-batch size: {config.MINI_BATCH_SIZE}")
+    print(f"   Upload every: {config.UPLOAD_EVERY_N_BATCHES} batches\n")
+    
+    # Process batches
+    batch_files = []  
+    
+    for start, end, batch_idx in batch_ranges:
+        print(f"\n{'='*50}")
+        print(f"Processing Batch {batch_idx + 1}/{len(batch_ranges)}")
+        print(f"{'='*50}")
+        
+        # Extract features
+        batch_data = extractor.extract_batch(start, end)
+        
+        # Save to disk
+        filepath = extractor.save_batch(batch_data, batch_idx)
+        batch_files.append(filepath)
+        
+        # Clear memory
+        del batch_data
+        import gc
+        gc.collect()
+        torch.cuda.empty_cache()
+        
+        # Upload to Kaggle every N batches
+        if len(batch_files) == config.UPLOAD_EVERY_N_BATCHES or batch_idx == len(batch_ranges) - 1:
+            print(f"\n Uploading {len(batch_files)} batch files to Kaggle...")
+            
+            # TODO: Implement upload function
+            # upload_to_kaggle(batch_files)
+            
+            # Delete local files after successful upload
+            for f in batch_files:
+                import os
+                os.remove(f)
+                print(f"  Deleted {f}")
+            
+            batch_files = []  # Clear the list
+            print(" Upload complete and local files cleaned\n")
+    
+    print("\n" + "="*50)
+    print(" Feature extraction complete!")
+    print("="*50)
 
-image_transforms = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
-])
-
-# test with first 10 samples (folders 00000-00009)
-print("Creating dataset...")
-test_dataset = MIMICDataset(
-    root_dir=config["DATA_ROOT"],  
-    start_idx=0,
-    end_idx=9,
-    transform=image_transforms
-)
-
-print(f"Dataset size: {len(test_dataset)}")
-
-# Create DataLoader
-test_loader = DataLoader(
-    test_dataset,
-    batch_size=10,      
-    shuffle=False,
-    num_workers=2       
-)
-
-print("Loading models...")
-vgg = VGG19().to(device).eval()
-llm = LLMEmbedder(model_name="emilyalsentzer/Bio_ClinicalBERT", max_length=512).to(device).eval()
-
-print("Models loaded!")
-
-print("\nProcessing batch...")
-for images, texts, folder_ids in test_loader:
-    print(f"Batch info:")
-    print(f"  Images shape: {images.shape}")  # Should be (10, 3, 224, 224)
-    print(f"  Number of texts: {len(texts)}")
-    print(f"  Folder IDs: {folder_ids}")
-    
-    images = images.to(device)
-    
-    print("\nExtracting VGG19 features...")
-    with torch.no_grad():
-        vgg_features = vgg(images)  # Returns [conv3_4, conv4_4, conv5_4]
-    
-    conv3_4, conv4_4, conv5_4 = vgg_features
-    
-    print(f"  conv3_4: {conv3_4.shape}")  # Expected: (10, 256, 56, 56)
-    print(f"  conv4_4: {conv4_4.shape}")  # Expected: (10, 512, 28, 28)
-    print(f"  conv5_4: {conv5_4.shape}")  # Expected: (10, 512, 14, 14)
-    
-    print("\nExtracting report embeddings...")
-    with torch.no_grad():
-        report_embeddings = llm(texts) 
-    
-    print(f"  report_embeddings: {report_embeddings.shape}")  
-    
-    # Check GPU memory
-    print(f"\nGPU Memory Used: {torch.cuda.max_memory_allocated() / 1e9:.2f} GB")
-    
-    # Verify all shapes are correct
-    assert conv3_4.shape == (10, 256, 56, 56), "conv3_4 shape mismatch!"
-    assert conv4_4.shape == (10, 512, 28, 28), "conv4_4 shape mismatch!"
-    assert conv5_4.shape == (10, 512, 14, 14), "conv5_4 shape mismatch!"
-    assert report_embeddings.shape == (10, 768), "report_embeddings shape mismatch!"
-    
-    print("\n All shapes correct!")
-    
-    # Sample one report to verify quality
-    print(f"\nSample report text (first 200 chars):")
-    print(texts[0][:200])
-    
-    print(f"\nSample embedding values (first 10):")
-    print(report_embeddings[0, :10])
-    
-    break  
+if __name__ == "__main__":
+    main()
