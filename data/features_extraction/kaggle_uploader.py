@@ -87,11 +87,16 @@ class KaggleUploader:
             )
             
             if self.dataset_exists:
+                # KEY FIX: Don't clear staging after successful upload
+                # We need to keep track of what we've uploaded
                 result = self.api.dataset_create_version(
                     folder=temp_dir,
                     version_notes=f"{chunk_name} - batches up to {upload_checkpoint}",
-                    quiet=False
+                    quiet=False,
+                    # This is important - it tells Kaggle to merge files rather than replace
+                    delete_old_versions=False
                 )
+                print(f"✓ Created new version with {len(batches_to_upload)} additional batches")
             else:
                 result = self.api.dataset_create_new(
                     folder=temp_dir,
@@ -99,7 +104,13 @@ class KaggleUploader:
                     quiet=False
                 )
                 self.dataset_exists = True
+                print(f"✓ Created new dataset with {len(batches_to_upload)} batches")
             
+            # Mark these batches as uploaded so we don't re-upload them
+            for batch_file in batches_to_upload:
+                batch_idx = int(batch_file.stem.split('_')[1])
+                self.uploaded_batches.add(batch_idx)
+                
             print(f"✓ {chunk_name} uploaded successfully ({len(batches_to_upload)} batches)")
             return True
             
@@ -111,13 +122,15 @@ class KaggleUploader:
                 shutil.rmtree(temp_dir)
 
     def clear_staging(self):
-        """Clear the staging directory to free up space"""
+        """Clear only the batches that have been successfully uploaded"""
         if self.staging_dir.exists():
+            files_cleared = 0
             for file in self.staging_dir.glob("batch_*.pt"):
-                file.unlink()
-            print(f"  Cleared {len(list(self.staging_dir.glob('batch_*.pt')))} files from staging")
-        else:
-            self.staging_dir.mkdir(exist_ok=True)
+                batch_idx = int(file.stem.split('_')[1])
+                if batch_idx in self.uploaded_batches:
+                    file.unlink()
+                    files_cleared += 1
+            print(f"  Cleared {files_cleared} uploaded files from staging")
 
     def upload_all_batches_final(self):
         """Upload all remaining batches at the end"""

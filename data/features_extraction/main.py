@@ -51,7 +51,7 @@ def main():
     total_start_time = time.time()
     
     # Upload chunks at these batch indices
-    upload_checkpoints = [15, 30]  # Upload after batches 15 and 30
+    upload_checkpoints = [1,2,3]  # Upload after batches 15 and 30
     
     for start, end, batch_idx in batch_ranges:
         batch_start_time = time.time()
@@ -73,31 +73,16 @@ def main():
             current_batch_file = f"batch_{batch_idx:04d}.pt"
             staging_batch_path = uploader.staging_dir / current_batch_file
             torch.save(batch_data, staging_batch_path)
-            uploader.uploaded_batches.add(batch_idx)
             print(f"  Saved batch {batch_idx} to staging")
             
             successful_batches += 1
             
-            # Check if we should upload a chunk
-            if batch_idx in upload_checkpoints:
-                print(f"\n{'='*30}")
-                print(f"UPLOAD CHECKPOINT: Batch {batch_idx}")
-                print(f"{'='*30}")
-                
-                upload_start = time.time()
-                chunk_name = f"chunk_upto_batch_{batch_idx}"
-                success = uploader.upload_chunk(upload_checkpoint=batch_idx, chunk_name=chunk_name)
-                upload_time = time.time() - upload_start
-                
-                if success:
-                    print(f"✓ Uploaded chunk up to batch {batch_idx} in {upload_time/60:.1f} minutes")
-                    # Clear staging directory to free up space
-                    uploader.clear_staging()
-                    print("  Cleared staging directory to free space")
-                else:
-                    print(f"✗ Failed to upload chunk at batch {batch_idx}")
+            # Clear memory but keep files in staging
+            del batch_data
+            gc.collect()
+            torch.cuda.empty_cache()
             
-            # Memory management
+            # Memory management only - no uploads during processing
             print_memory_usage()
             batch_total_time = time.time() - batch_start_time
             avg_time = (time.time() - total_start_time) / (batch_idx + 1)
@@ -106,11 +91,6 @@ def main():
             print(f"\n Progress: {batch_idx + 1}/{len(batch_ranges)} batches")
             print(f"   Time this batch: {batch_total_time:.1f}s")
             print(f"   Estimated remaining: {remaining/60:.1f} minutes")
-            
-            # Clear memory
-            del batch_data
-            gc.collect()
-            torch.cuda.empty_cache()
             
         except Exception as e:
             print(f"\n ERROR processing batch {batch_idx}: {e}")
@@ -131,20 +111,24 @@ def main():
         print(f"Failed batches: {failed_batches}/{len(batch_ranges)}")
         print(f"Corrupted samples: {len(all_corrupted_samples)}")
         
-        # Upload final chunk
+        # Upload all batches at once
         if successful_batches > 0:
-            print("\nStarting final upload of remaining batches...")
+            print("\nStarting final upload of all batches...")
             final_batches = list(uploader.staging_dir.glob("batch_*.pt"))
             if final_batches:
                 upload_start = time.time()
-                success = uploader.upload_chunk(upload_checkpoint=len(batch_ranges)-1, chunk_name="final_chunk")
+                success = uploader.upload_chunk(
+                    upload_checkpoint=len(batch_ranges)-1, 
+                    chunk_name="complete_dataset"
+                )
                 upload_time = time.time() - upload_start
                 if success:
-                    print(f"✓ Final upload completed in {upload_time/60:.1f} minutes")
+                    print(f"✓ Complete dataset uploaded in {upload_time/60:.1f} minutes")
+                    print(f"✓ Uploaded {len(final_batches)} total batches")
                 else:
                     print("✗ Final upload failed")
             else:
-                print("No batches remaining for final upload")
+                print("No batches found for upload")
                 
     finally:
         uploader.cleanup()
