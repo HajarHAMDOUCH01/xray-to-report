@@ -21,7 +21,7 @@ def print_memory_usage():
 
 def main():
     print("="*50)
-    print("MIMIC Feature Extraction Pipeline (RAM-Optimized)")
+    print("MIMIC Feature Extraction Pipeline (Chunked Upload)")
     print("="*50)
     
     print("\n1. Loading models...")
@@ -43,12 +43,15 @@ def main():
             batch_ranges.append((start, end, batch_idx))
     
     print(f"\n2. Will process {len(batch_ranges)} batches")
-    print(f"   Upload every: {config.UPLOAD_EVERY_N_BATCHES} batches\n")
+    print(f"   Upload chunks: at 15 batches and at completion\n")
     
     all_corrupted_samples = []
     successful_batches = 0
     failed_batches = 0
     total_start_time = time.time()
+    
+    # Upload chunks at these batch indices
+    upload_checkpoints = [15, 30]  # Upload after batches 15 and 30
     
     for start, end, batch_idx in batch_ranges:
         batch_start_time = time.time()
@@ -70,10 +73,29 @@ def main():
             current_batch_file = f"batch_{batch_idx:04d}.pt"
             staging_batch_path = uploader.staging_dir / current_batch_file
             torch.save(batch_data, staging_batch_path)
-            uploader.uploaded_batches.add(batch_idx)  # FIX: Add to uploaded_batches set
+            uploader.uploaded_batches.add(batch_idx)
             print(f"  Saved batch {batch_idx} to staging")
             
             successful_batches += 1
+            
+            # Check if we should upload a chunk
+            if batch_idx in upload_checkpoints:
+                print(f"\n{'='*30}")
+                print(f"UPLOAD CHECKPOINT: Batch {batch_idx}")
+                print(f"{'='*30}")
+                
+                upload_start = time.time()
+                chunk_name = f"chunk_upto_batch_{batch_idx}"
+                success = uploader.upload_chunk(upload_checkpoint=batch_idx, chunk_name=chunk_name)
+                upload_time = time.time() - upload_start
+                
+                if success:
+                    print(f"✓ Uploaded chunk up to batch {batch_idx} in {upload_time/60:.1f} minutes")
+                    # Clear staging directory to free up space
+                    uploader.clear_staging()
+                    print("  Cleared staging directory to free space")
+                else:
+                    print(f"✗ Failed to upload chunk at batch {batch_idx}")
             
             # Memory management
             print_memory_usage()
@@ -97,7 +119,7 @@ def main():
             failed_batches += 1
             continue
     
-    # Final upload and cleanup
+    # Final upload of remaining batches
     try:
         total_time = time.time() - total_start_time
         
@@ -109,13 +131,21 @@ def main():
         print(f"Failed batches: {failed_batches}/{len(batch_ranges)}")
         print(f"Corrupted samples: {len(all_corrupted_samples)}")
         
-        # Only attempt final upload if we have successful batches
+        # Upload final chunk
         if successful_batches > 0:
-            print("\nStarting final upload of all batches...")
-            uploader.upload_all_batches_final()
-        else:
-            print("\nNo successful batches to upload")
-            
+            print("\nStarting final upload of remaining batches...")
+            final_batches = list(uploader.staging_dir.glob("batch_*.pt"))
+            if final_batches:
+                upload_start = time.time()
+                success = uploader.upload_chunk(upload_checkpoint=len(batch_ranges)-1, chunk_name="final_chunk")
+                upload_time = time.time() - upload_start
+                if success:
+                    print(f"✓ Final upload completed in {upload_time/60:.1f} minutes")
+                else:
+                    print("✗ Final upload failed")
+            else:
+                print("No batches remaining for final upload")
+                
     finally:
         uploader.cleanup()
 
