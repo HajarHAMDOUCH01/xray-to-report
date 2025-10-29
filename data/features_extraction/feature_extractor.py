@@ -22,7 +22,6 @@ class FeatureExtractor:
             transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
         ])
         
-        # Step 1: Create dataset for this range
         dataset = MIMICDataset(
             root_dir=self.config.DATA_ROOT,
             start_idx=start_idx,
@@ -30,7 +29,6 @@ class FeatureExtractor:
             transform=image_transforms
         )
         
-        # Step 2: Create DataLoader with mini-batching
         dataloader = DataLoader(
             dataset,
             batch_size=self.config.MINI_BATCH_SIZE,  # 32 or 64
@@ -40,14 +38,12 @@ class FeatureExtractor:
             pin_memory=True  # Faster GPU transfer
         )
         
-        # Step 3: Initialize accumulation lists
         all_conv3_4 = []
         all_conv4_4 = []
         all_conv5_4 = []
         all_report_emb = []
         all_sample_ids = []
         
-        # Step 4: Process each mini-batch
         print(f"Processing samples {start_idx:05d} to {end_idx:05d}...")
         
         with torch.no_grad():  # No gradients needed
@@ -72,14 +68,14 @@ class FeatureExtractor:
                 if len(all_conv3_4) % 10 == 0:  # Every 10 mini-batches
                     torch.cuda.empty_cache()
         
-        # Step 5: Stack into single tensors
         print("Consolidating features...")
+        # In feature_extractor.py, after extraction:
         batch_data = {
-            'conv3_4': torch.cat(all_conv3_4, dim=0),      # (N, 256, 56, 56)
-            'conv4_4': torch.cat(all_conv4_4, dim=0),      # (N, 512, 28, 28)
-            'conv5_4': torch.cat(all_conv5_4, dim=0),      # (N, 512, 14, 14)
-            'report_embeddings': torch.cat(all_report_emb, dim=0),  # (N, 768)
-            'sample_ids': all_sample_ids  # List of strings
+            'conv3_4': torch.cat(all_conv3_4, dim=0).half(),  # FP16 instead of FP32
+            'conv4_4': torch.cat(all_conv4_4, dim=0).half(),
+            'conv5_4': torch.cat(all_conv5_4, dim=0).half(),
+            'report_embeddings': torch.cat(all_report_emb, dim=0).half(),
+            'sample_ids': all_sample_ids
         }
         
         # Verify shapes

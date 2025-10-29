@@ -76,8 +76,8 @@ class LLMEmbedder(nn.Module):
     def __init__(self, config):
         super(LLMEmbedder, self).__init__()
         # loading the tokenizer and model
-        self.tokenizer = AutoTokenizer.from_pretrained(config.LANGUAGE_ENCODER_NAME)
-        self.model = AutoModel.from_pretrained(config.LANGUAGE_ENCODER_NAME)
+        self.tokenizer = AutoTokenizer.from_pretrained(config.LLM_MODEL_NAME)
+        self.model = AutoModel.from_pretrained(config.LLM_MODEL_NAME)
         self.max_length = config.MAX_REPORT_LENGTH
         self.model.to(device)
         self.model.eval()

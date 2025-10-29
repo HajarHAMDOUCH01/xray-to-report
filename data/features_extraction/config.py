@@ -2,7 +2,7 @@ import torch
 from pathlib import Path
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-DATA_ROOT = ""  
+DATA_ROOT = "/root/.cache/kagglehub/datasets/hajarhamdouch01/mimic-dataset/versions/1"  
 OUTPUT_DIR = "./temp_batches"  
 
 
@@ -14,10 +14,11 @@ TOTAL_SAMPLES = 2000
 BATCH_SIZE = 1000  
 START_IDX = 0
 END_IDX = 1999
-MINI_BATCH_SIZE = 32  
+MINI_BATCH_SIZE = 16  
 NUM_WORKERS = 4 
+NUM_WORKERS_UPLOAD = 0  # Disabling during upload to save RAM
 PREFETCH_FACTOR = 2
-UPLOAD_EVERY_N_BATCHES = 5  
+UPLOAD_EVERY_N_BATCHES = 1
 
 # Model configurations
 IMAGE_SIZE = 224  
