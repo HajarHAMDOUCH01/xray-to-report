@@ -61,7 +61,7 @@ class VGG19(nn.Module):
         Returns:
             List of feature maps at different layers
         """
-        x = self.normalize_image(x)
+        # x = self.normalize_image(x)
         
         h1 = self.slice1(x)
         h2 = self.slice2(h1)

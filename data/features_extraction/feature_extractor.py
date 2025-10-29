@@ -15,17 +15,17 @@ class FeatureExtractor:
         from dataset import MIMICDataset
         from torchvision import transforms
         
-        # image_transforms = transforms.Compose([
-        #     transforms.Resize((self.config.IMAGE_SIZE, self.config.IMAGE_SIZE)),
-        #     transforms.ToTensor(),
-        #     transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
-        # ])
+        image_transforms = transforms.Compose([
+            transforms.Resize((self.config.IMAGE_SIZE, self.config.IMAGE_SIZE)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+        ])
         
         dataset = MIMICDataset(
             root_dir=self.config.DATA_ROOT,
             start_idx=start_idx,
             end_idx=end_idx,
-            transform=None # because normalization is done by vgg19 forward 
+            transform=image_transforms 
         )
         
         dataloader = DataLoader(
