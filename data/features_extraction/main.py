@@ -51,7 +51,7 @@ def main():
     total_start_time = time.time()
     
     # Upload chunks at these batch indices
-    upload_checkpoints = [1,2,3]  # Upload after batches 15 and 30
+    upload_checkpoints = [10,20,30]  # Upload after batches 15 and 30
     
     for start, end, batch_idx in batch_ranges:
         batch_start_time = time.time()

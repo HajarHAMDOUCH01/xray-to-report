@@ -11,7 +11,7 @@ LLM_MODEL_NAME = "emilyalsentzer/Bio_ClinicalBERT"
 # Processing parameters
 # 30632 
 TOTAL_SAMPLES = 30632
-BATCH_SIZE = 15000  
+BATCH_SIZE = 1000  
 START_IDX = 0
 END_IDX = 30632
 MINI_BATCH_SIZE = 16  
