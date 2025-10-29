@@ -33,14 +33,13 @@ class VGG19(nn.Module):
         self.register_buffer('mean', torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1))
         self.register_buffer('std', torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1))
         
-        # Extract features at different layers
-        # conv1_2 (early features)
+        # conv1_2 
         self.slice1 = nn.Sequential(*[vgg_features[x] for x in range(0, 4)])  
-        # conv2_2 (mid-level features)
+        # conv2_2 
         self.slice2 = nn.Sequential(*[vgg_features[x] for x in range(4, 9)])  
-        # conv3_4 (higher-level features)
+        # conv3_4 
         self.slice3 = nn.Sequential(*[vgg_features[x] for x in range(9, 18)])
-        # conv4_4 (semantic features)
+        # conv4_4 
         self.slice4 = nn.Sequential(*[vgg_features[x] for x in range(18, 27)])
         # conv5_4 
         self.slice5 = nn.Sequential(*[vgg_features[x] for x in range(27, 35)])
@@ -75,13 +74,11 @@ class VGG19(nn.Module):
 class LLMEmbedder(nn.Module):
     def __init__(self, config):
         super(LLMEmbedder, self).__init__()
-        # loading the tokenizer and model
         self.tokenizer = AutoTokenizer.from_pretrained(config.LLM_MODEL_NAME)
         self.model = AutoModel.from_pretrained(config.LLM_MODEL_NAME)
         self.max_length = config.MAX_REPORT_LENGTH
         self.model.to(device)
         self.model.eval()
-        #parameters freezing 
         for param in self.model.parameters():
             param.requires_grad = False
     

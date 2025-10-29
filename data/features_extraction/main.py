@@ -10,7 +10,6 @@ import os
 import psutil
 
 def print_memory_usage():
-    """Print current RAM and GPU usage"""
     # RAM
     ram = psutil.virtual_memory()
     print(f"   RAM: {ram.used/1e9:.1f}/{ram.total/1e9:.1f} GB ({ram.percent}%)")
@@ -26,7 +25,6 @@ def main():
     print("MIMIC Feature Extraction Pipeline (RAM-Optimized)")
     print("="*50)
     
-    # Initialize models
     print("\n1. Loading models...")
     vgg = VGG19().to(config.DEVICE).eval()
     llm = LLMEmbedder(config).to(config.DEVICE).eval()
@@ -35,10 +33,9 @@ def main():
     extractor = FeatureExtractor(vgg, llm, config)
     uploader = KaggleUploader(
         dataset_slug=config.KAGGLE_DATASET_SLUG,
-        username=config.KAGGLE_USERNAME # Persistent across batches!
+        username=config.KAGGLE_USERNAME
     )
     
-    # Calculate batches
     batch_ranges = []
     for batch_idx in range(config.NUM_BATCHES + 1):
         start = batch_idx * config.BATCH_SIZE
@@ -49,13 +46,11 @@ def main():
     print(f"\n2. Will process {len(batch_ranges)} batches")
     print(f"   Upload every: {config.UPLOAD_EVERY_N_BATCHES} batches\n")
     
-    # Track statistics
     all_corrupted_samples = []
     successful_uploads = 0
     failed_uploads = 0
     total_start_time = time.time()
     
-    # Process batches
     for start, end, batch_idx in batch_ranges:
         batch_start_time = time.time()
         
@@ -64,10 +59,8 @@ def main():
         print(f"{'='*50}")
         
         try:
-            # Extract features
             batch_data = extractor.extract_batch(start, end)
             
-            # Track corrupted
             if 'corrupted_samples' in batch_data:
                 all_corrupted_samples.extend(batch_data['corrupted_samples'])
             
@@ -93,7 +86,6 @@ def main():
             else:
                 failed_uploads += 0
             
-            # Print progress
             print_memory_usage()
             batch_total_time = time.time() - batch_start_time
             avg_time = (time.time() - total_start_time) / (batch_idx + 1)
@@ -111,16 +103,17 @@ def main():
             import traceback
             traceback.print_exc()
             continue
-    
-    # Final summary
-    total_time = time.time() - total_start_time
-    
-    print("\n" + "="*50)
-    print(" EXTRACTION COMPLETE")
-    print("="*50)
-    print(f"Total time: {total_time/60:.1f} minutes")
-    print(f"Successful batches: {successful_uploads}/{len(batch_ranges)}")
-    print(f"Corrupted samples: {len(all_corrupted_samples)}")
+    try:
+      total_time = time.time() - total_start_time
+      
+      print("\n" + "="*50)
+      print(" EXTRACTION COMPLETE")
+      print("="*50)
+      print(f"Total time: {total_time/60:.1f} minutes")
+      print(f"Successful batches: {successful_uploads}/{len(batch_ranges)}")
+      print(f"Corrupted samples: {len(all_corrupted_samples)}")
+    finally:
+      uploader.cleanup()
 
 if __name__ == "__main__":
     main()

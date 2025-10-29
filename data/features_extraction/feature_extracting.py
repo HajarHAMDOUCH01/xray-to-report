@@ -1,3 +1,5 @@
+"""this is not currently used"""
+
 import h5py
 import os
 import torch 
@@ -21,18 +23,15 @@ transforms = transforms.Compose([
     transforms.ToTensor(),
 ])
 
-# STEP 1: Filter valid images first
 def get_valid_image_paths(image_paths):
-    """Check which images can be opened and return valid paths."""
     valid_paths = []
     corrupted_count = 0
     
     print("Checking image validity...")
     for img_path in image_paths:
         try:
-            # Try to open and verify
             with Image.open(img_path) as img:
-                img.verify()  # Verify it's a valid image
+                img.verify()  
             valid_paths.append(img_path)
         except Exception as e:
             corrupted_count += 1
@@ -46,7 +45,6 @@ def get_valid_image_paths(image_paths):
 
 
 def preprocess_data(image_paths, save_format: str = "hdf5", transform=transforms):
-    # Filter valid images first
     valid_image_paths, corrupted_count = get_valid_image_paths(image_paths)
     
     if len(valid_image_paths) == 0:
@@ -56,7 +54,6 @@ def preprocess_data(image_paths, save_format: str = "hdf5", transform=transforms
     ACTUAL_DATASET_SIZE = len(valid_image_paths)
     
     with h5py.File('extracted_features_vgg19.hdf5', 'w') as hf: 
-        # Create datasets with ACTUAL size
         conv3_4_layer = hf.create_dataset('conv3_4_features', 
                                           shape=(ACTUAL_DATASET_SIZE, 256, 56, 56), 
                                           compression='gzip', 
@@ -76,7 +73,6 @@ def preprocess_data(image_paths, save_format: str = "hdf5", transform=transforms
             batch_images = []
             batch_paths = valid_image_paths[batch_idx:batch_idx + BATCH_SIZE]
             
-            # STEP 2: Skip corrupted images during batch processing
             for image_path in batch_paths:
                 try:
                     img = Image.open(image_path).convert('RGB')
@@ -85,8 +81,6 @@ def preprocess_data(image_paths, save_format: str = "hdf5", transform=transforms
                     batch_images.append(img)
                 except Exception as e:
                     print(f"Error loading {image_path}: {e}")
-                    # Add black placeholder image
-                    batch_images.append(torch.zeros(3, 224, 224))
             
             if len(batch_images) == 0:
                 continue
@@ -96,7 +90,6 @@ def preprocess_data(image_paths, save_format: str = "hdf5", transform=transforms
             with torch.no_grad():
                 extracted_features = vgg_net(batch_tensor)
             
-            # Write actual batch size
             actual_batch_size = len(batch_images)
             end_idx = processed_count + actual_batch_size
             
@@ -109,7 +102,6 @@ def preprocess_data(image_paths, save_format: str = "hdf5", transform=transforms
             if (batch_idx // BATCH_SIZE) % 10 == 0:
                 print(f"Processed {processed_count}/{ACTUAL_DATASET_SIZE} images")
             
-            # Clean up memory
             del batch_tensor, extracted_features, batch_images
             torch.cuda.empty_cache()
     

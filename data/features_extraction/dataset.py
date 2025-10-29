@@ -16,17 +16,15 @@ class MIMICDataset(Dataset):
         """
         self.root_dir = Path(root_dir)
         self.transform = transform
-        self.samples = []  # Valid samples only
-        self.corrupted_samples = []  # Track problematic samples
+        self.samples = []  
+        self.corrupted_samples = [] 
         
         print(f"Scanning folders {start_idx:05d} to {end_idx:05d}...")
         
-        # Build list of folder paths with zero-padding
         for idx in range(start_idx, end_idx + 1):
             folder_id = f"{idx:05d}"
             folder_path = self.root_dir / folder_id
             
-            # Check if folder exists
             if not folder_path.exists():
                 print(f"  Warning: Folder {folder_id} does not exist, skipping...")
                 self.corrupted_samples.append({
@@ -35,11 +33,9 @@ class MIMICDataset(Dataset):
                 })
                 continue
             
-            # Find PNG and JSON files
             png_files = list(folder_path.glob("*.png"))
             json_files = list(folder_path.glob("*.json"))
             
-            # Verify exactly one of each
             if len(png_files) != 1 or len(json_files) != 1:
                 print(f"  Warning: Folder {folder_id} has {len(png_files)} PNGs and {len(json_files)} JSONs, skipping...")
                 self.corrupted_samples.append({
@@ -53,15 +49,13 @@ class MIMICDataset(Dataset):
             png_path = png_files[0]
             json_path = json_files[0]
             
-            # Validate image can be opened (CRITICAL STEP)
             if validate_images:
                 try:
                     with Image.open(png_path) as img:
-                        img.verify()  # Check if it's a valid image
+                        img.verify()  
                     
-                    # Re-open for actual loading (verify() closes the file)
                     with Image.open(png_path) as img:
-                        img.load()  # Actually load pixel data
+                        img.load()  
                         
                 except Exception as e:
                     print(f" ERROR: Corrupted image in {folder_id}: {str(e)}")
@@ -71,14 +65,12 @@ class MIMICDataset(Dataset):
                         'error': str(e),
                         'png_path': str(png_path)
                     })
-                    continue  # Skip this sample
+                    continue  
             
-            # Validate JSON can be parsed
             try:
                 with open(json_path, 'r') as f:
                     report_data = json.load(f)
                     
-                # Check if caption exists
                 if 'caption' not in report_data or not report_data['caption'].strip():
                     print(f"  Warning: {folder_id} has empty caption, using placeholder")
                 
@@ -92,15 +84,13 @@ class MIMICDataset(Dataset):
                 })
                 continue
             
-            # If all validations pass, add to valid samples
             self.samples.append({
                 'folder_id': folder_id,
                 'png_path': png_path,
                 'json_path': json_path,
-                'original_index': idx  # Store original position
+                'original_index': idx  
             })
         
-        # Summary
         total_expected = end_idx - start_idx + 1
         valid_count = len(self.samples)
         corrupted_count = len(self.corrupted_samples)
@@ -131,18 +121,14 @@ class MIMICDataset(Dataset):
         """
         sample = self.samples[idx]
         
-        # Load image
         image = Image.open(sample['png_path']).convert('RGB')
         
-        # Apply transforms
         if self.transform:
             image = self.transform(image)
         
-        # Load JSON and extract report text
         with open(sample['json_path'], 'r') as f:
             report_data = json.load(f)
         
-        # Extract caption with fallback
         report_text = report_data.get('caption', '').strip()
         if not report_text:
             report_text = "No findings reported."
