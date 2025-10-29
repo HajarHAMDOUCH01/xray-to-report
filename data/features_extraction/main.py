@@ -74,10 +74,7 @@ def main():
             extraction_time = time.time() - batch_start_time
             print(f"  Extraction time: {extraction_time:.1f}s")
             
-            # Clear memory
-            del batch_data
-            gc.collect()
-            torch.cuda.empty_cache()
+
             
             upload_start = time.time()
             
@@ -105,7 +102,10 @@ def main():
             print(f"\n Progress: {batch_idx + 1}/{len(batch_ranges)} batches")
             print(f"   Time this batch: {batch_total_time:.1f}s")
             print(f"   Estimated remaining: {remaining/60:.1f} minutes")
-            
+            # Clear memory
+            del batch_data
+            gc.collect()
+            torch.cuda.empty_cache()
         except Exception as e:
             print(f"\n ERROR processing batch {batch_idx}: {e}")
             import traceback
