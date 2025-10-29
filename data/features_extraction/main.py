@@ -6,7 +6,6 @@ from models import VGG19, LLMEmbedder
 from feature_extractor import FeatureExtractor
 from kaggle_uploader import KaggleUploader
 import os
-
 import psutil
 
 def print_memory_usage():
@@ -47,8 +46,8 @@ def main():
     print(f"   Upload every: {config.UPLOAD_EVERY_N_BATCHES} batches\n")
     
     all_corrupted_samples = []
-    successful_uploads = 0
-    failed_uploads = 0
+    successful_batches = 0
+    failed_batches = 0
     total_start_time = time.time()
     
     for start, end, batch_idx in batch_ranges:
@@ -67,25 +66,16 @@ def main():
             extraction_time = time.time() - batch_start_time
             print(f"  Extraction time: {extraction_time:.1f}s")
             
-
+            # Save to staging
+            current_batch_file = f"batch_{batch_idx:04d}.pt"
+            staging_batch_path = uploader.staging_dir / current_batch_file
+            torch.save(batch_data, staging_batch_path)
+            uploader.uploaded_batches.add(batch_idx)  # FIX: Add to uploaded_batches set
+            print(f"  Saved batch {batch_idx} to staging")
             
-            upload_start = time.time()
+            successful_batches += 1
             
-            version_notes = f"Batches {batch_idx} through {batch_idx}"
-            success = uploader.process_and_upload_batch(
-                batch_idx, 
-                batch_data, 
-                version_notes=f"Batch {batch_idx}"
-            )
-            
-            upload_time = time.time() - upload_start
-            print(f"  Upload time: {upload_time:.1f}s")
-            
-            if success:
-                successful_uploads += 1
-            else:
-                failed_uploads += 0
-            
+            # Memory management
             print_memory_usage()
             batch_total_time = time.time() - batch_start_time
             avg_time = (time.time() - total_start_time) / (batch_idx + 1)
@@ -94,26 +84,40 @@ def main():
             print(f"\n Progress: {batch_idx + 1}/{len(batch_ranges)} batches")
             print(f"   Time this batch: {batch_total_time:.1f}s")
             print(f"   Estimated remaining: {remaining/60:.1f} minutes")
+            
             # Clear memory
             del batch_data
             gc.collect()
             torch.cuda.empty_cache()
+            
         except Exception as e:
             print(f"\n ERROR processing batch {batch_idx}: {e}")
             import traceback
             traceback.print_exc()
+            failed_batches += 1
             continue
+    
+    # Final upload and cleanup
     try:
-      total_time = time.time() - total_start_time
-      
-      print("\n" + "="*50)
-      print(" EXTRACTION COMPLETE")
-      print("="*50)
-      print(f"Total time: {total_time/60:.1f} minutes")
-      print(f"Successful batches: {successful_uploads}/{len(batch_ranges)}")
-      print(f"Corrupted samples: {len(all_corrupted_samples)}")
+        total_time = time.time() - total_start_time
+        
+        print("\n" + "="*50)
+        print(" EXTRACTION COMPLETE")
+        print("="*50)
+        print(f"Total extraction time: {total_time/60:.1f} minutes")
+        print(f"Successful batches: {successful_batches}/{len(batch_ranges)}")
+        print(f"Failed batches: {failed_batches}/{len(batch_ranges)}")
+        print(f"Corrupted samples: {len(all_corrupted_samples)}")
+        
+        # Only attempt final upload if we have successful batches
+        if successful_batches > 0:
+            print("\nStarting final upload of all batches...")
+            uploader.upload_all_batches_final()
+        else:
+            print("\nNo successful batches to upload")
+            
     finally:
-      uploader.cleanup()
+        uploader.cleanup()
 
 if __name__ == "__main__":
     main()

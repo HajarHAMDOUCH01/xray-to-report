@@ -11,7 +11,7 @@ class KaggleUploader:
         self.username = username
         self.setup_kaggle_api()
         self.dataset_exists = self.check_dataset_exists()
-        self.uploaded_batches = []  
+        self.uploaded_batches = set()  # Track uploaded batch indices
         self.staging_dir = Path("./kaggle_staging")
         self.staging_dir.mkdir(exist_ok=True)
 
@@ -45,53 +45,41 @@ class KaggleUploader:
         metadata_path = Path(folder) / "dataset-metadata.json"
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=2)
-        print(f" Created dataset-metadata.json at {metadata_path}")
 
-    def _prepare_upload_directory(self, batch_idx, batch_data):
-        temp_dir = tempfile.mkdtemp()
-        temp_path = Path(temp_dir)
-        
-        current_batch_file = f"batch_{batch_idx:04d}.pt"
-        current_batch_path = temp_path / current_batch_file
-        torch.save(batch_data, current_batch_path)
-        print(f" Saved batch data to {current_batch_path}")
-        
-        staging_batch_path = self.staging_dir / current_batch_file
-        torch.save(batch_data, staging_batch_path)
-        
-        self.uploaded_batches.append(current_batch_file)
-        
-        for batch_file in self.uploaded_batches:
-            if batch_file != current_batch_file:  
-                source_path = self.staging_dir / batch_file
-                if source_path.exists():
-                    shutil.copy2(source_path, temp_path / batch_file)
-                    print(f" Copied previous batch: {batch_file}")
-        
-        print(f" Upload directory contains {len(self.uploaded_batches)} batch files")
-        return temp_dir, temp_path
-
-    def process_and_upload_batch(self, batch_idx, batch_data, version_notes=""):
+    def upload_all_batches_final(self):
+        """Upload all batches together at the end"""
+        batch_files = list(self.staging_dir.glob("batch_*.pt"))
+        if not batch_files:
+            print("No batches found in staging directory")
+            return False
+            
         temp_dir = None
         try:
-            temp_dir, temp_path = self._prepare_upload_directory(batch_idx, batch_data)
+            temp_dir = tempfile.mkdtemp()
+            temp_path = Path(temp_dir)
+            
+            # Copy all staged batches to temp directory
+            for batch_file in batch_files:
+                shutil.copy2(batch_file, temp_path / batch_file.name)
+            
+            print(f" Consolidated {len(batch_files)} batches for final upload")
+            print(f" Batch files: {[f.name for f in batch_files]}")
             
             self._create_dataset_metadata(
-                temp_dir, 
-                title=f"MIMIC Features - Up to Batch {batch_idx}",
-                description=f"Feature embeddings for MIMIC dataset - Batches 0 to {batch_idx}"
+                temp_dir,
+                title="MIMIC Features - Complete Dataset",
+                description=f"Complete feature embeddings for MIMIC dataset - {len(batch_files)} batches"
             )
             
-            # Upload
+            print(" Creating final dataset version with all batches...")
+            
             if self.dataset_exists:
-                print(f" Creating new version including batches 0 to {batch_idx}...")
                 result = self.api.dataset_create_version(
                     folder=temp_dir,
-                    version_notes=f"{version_notes} - Includes batches 0 to {batch_idx}",
+                    version_notes=f"Complete dataset with {len(batch_files)} batches",
                     quiet=False
                 )
             else:
-                print(f" Creating new dataset with batch {batch_idx}...")
                 result = self.api.dataset_create_new(
                     folder=temp_dir,
                     public=False,
@@ -99,16 +87,13 @@ class KaggleUploader:
                 )
                 self.dataset_exists = True
             
-            print(f"✓ Batch {batch_idx} uploaded successfully (total: {len(self.uploaded_batches)} batches)")
+            print("✓ All batches uploaded successfully in final consolidation")
             return True
             
         except Exception as e:
-            print(f"✗ Failed to upload batch {batch_idx}: {e}")
-            if batch_idx < len(self.uploaded_batches):
-                self.uploaded_batches.pop()
+            print(f"✗ Failed to upload final consolidation: {e}")
             return False
         finally:
-            # Clean up temporary directory
             if temp_dir and os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir)
 
