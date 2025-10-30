@@ -43,15 +43,12 @@ def main():
             batch_ranges.append((start, end, batch_idx))
     
     print(f"\n2. Will process {len(batch_ranges)} batches")
-    print(f"   Upload chunks: at 15 batches and at completion\n")
     
     all_corrupted_samples = []
     successful_batches = 0
     failed_batches = 0
     total_start_time = time.time()
-    
-    # Upload chunks at these batch indices
-    upload_checkpoints = [10,20,30]  # Upload after batches 15 and 30
+    upload_checkpoints = [10,20,30] 
     
     for start, end, batch_idx in batch_ranges:
         batch_start_time = time.time()
@@ -69,7 +66,6 @@ def main():
             extraction_time = time.time() - batch_start_time
             print(f"  Extraction time: {extraction_time:.1f}s")
             
-            # Save to staging
             current_batch_file = f"batch_{batch_idx:04d}.pt"
             staging_batch_path = uploader.staging_dir / current_batch_file
             torch.save(batch_data, staging_batch_path)
@@ -77,12 +73,10 @@ def main():
             
             successful_batches += 1
             
-            # Clear memory but keep files in staging
             del batch_data
             gc.collect()
             torch.cuda.empty_cache()
             
-            # Memory management only - no uploads during processing
             print_memory_usage()
             batch_total_time = time.time() - batch_start_time
             avg_time = (time.time() - total_start_time) / (batch_idx + 1)
@@ -99,7 +93,6 @@ def main():
             failed_batches += 1
             continue
     
-    # Final upload of remaining batches
     try:
         total_time = time.time() - total_start_time
         
@@ -111,7 +104,6 @@ def main():
         print(f"Failed batches: {failed_batches}/{len(batch_ranges)}")
         print(f"Corrupted samples: {len(all_corrupted_samples)}")
         
-        # Upload all batches at once
         if successful_batches > 0:
             print("\nStarting final upload of all batches...")
             final_batches = list(uploader.staging_dir.glob("batch_*.pt"))

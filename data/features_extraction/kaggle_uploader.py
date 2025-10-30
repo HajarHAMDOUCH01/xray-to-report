@@ -54,10 +54,8 @@ class KaggleUploader:
             print("No batches found in staging directory")
             return False
             
-        # Sort batches numerically
         batch_files.sort(key=lambda x: int(x.stem.split('_')[1]))
         
-        # Get batches up to checkpoint
         batches_to_upload = [bf for bf in batch_files if int(bf.stem.split('_')[1]) <= upload_checkpoint]
         
         if not batches_to_upload:
@@ -69,7 +67,6 @@ class KaggleUploader:
             temp_dir = tempfile.mkdtemp()
             temp_path = Path(temp_dir)
             
-            # Copy selected batches to temp directory
             for batch_file in batches_to_upload:
                 shutil.copy2(batch_file, temp_path / batch_file.name)
             
@@ -87,8 +84,6 @@ class KaggleUploader:
             )
             
             if self.dataset_exists:
-                # KEY FIX: Don't clear staging after successful upload
-                # We need to keep track of what we've uploaded
                 result = self.api.dataset_create_version(
                     folder=temp_dir,
                     version_notes=f"{chunk_name} - batches up to {upload_checkpoint}",
@@ -106,7 +101,6 @@ class KaggleUploader:
                 self.dataset_exists = True
                 print(f"✓ Created new dataset with {len(batches_to_upload)} batches")
             
-            # Mark these batches as uploaded so we don't re-upload them
             for batch_file in batches_to_upload:
                 batch_idx = int(batch_file.stem.split('_')[1])
                 self.uploaded_batches.add(batch_idx)
