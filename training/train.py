@@ -23,14 +23,20 @@ from models.text_encoder.embeddings_extractor import LLMEmbedder
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class TrainQformer:
-    def __init__(self, qformer, vgg, llmEmbedder, training_config):
-        self.qformer_model = qformer.to(device)
-        self.vgg_model = vgg
-        self.llmembedder_model = llmEmbedder
-        self.config = training_config
+    # they are initialized in trainer and the models are moved to cuda before using them to instantiate this class 
+    def __init__(self, qformer, vgg, llmEmbedder, training_config):    
         self.device = device
+        # just for consistency     
+        self.qformer_model = qformer.to(device) 
+        self.vgg_model = vgg.to(device)
+        self.llmembedder_model = llmEmbedder.to(device)
 
-        self.optimizer = AdamW(self.qformer_model.parameters(), lr=training_config["lr"])
+        self.config = training_config
+        
+        self.optimizer = AdamW(self.qformer_model.parameters(), lr=training_config["lr"], fused=True if device.type == 'cuda' else False)
+
+        # we have to track 
+        self.best_val_loss = float('inf')
 
     def contrastive_loss(self, image_features, text_embeddings, temperature=0.07):
         # print("DEBUG image shape:", image_features.shape)
@@ -38,7 +44,7 @@ class TrainQformer:
 
         if len(image_features.shape) == 3:
             image_features = image_features.mean(dim=1)
-        # this is L2 Normalization of the features 
+        # this is L2 Normalization of the features and the embdessings
         image_features = F.normalize(image_features, p=2, dim=1)
         text_embeddings = F.normalize(text_embeddings, p=2, dim=1)
 
@@ -72,26 +78,32 @@ class TrainQformer:
         self.vgg_model.eval().requires_grad_(False)
         self.llmembedder_model.eval().requires_grad_(False)
 
-        self.vgg_model.to(device)
-        self.llmembedder_model.to(device)
-
-        self.qformer_model.train()
+        # initalizing the qformer 
+        self.qformer_model.train().requires_grad_(True)
 
         total_loss = 0
         num_batches = 0
 
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
         for batch in tqdm(dataloader, desc="Training"):
-            xrays = batch['image'].to(self.device)
+            xrays = batch['image'].to(self.device, non_blocking=True) # the image is a tensor , so it's moved to gpu 
             reports = batch['report']
             # print(reports)
 
             self.optimizer.zero_grad()
 
             with torch.no_grad():
+                assert xrays.device == self.vgg_model.weight.device , "xrays and vgg should be in the same device !"
                 vgg_features = self.vgg_model(xrays)
+                assert xrays.device == self.vgg_model.weight.device , "xrays and vgg should be in the same device !"
                 text_embeddings = self.llmembedder_model(reports)
 
+                # now vgg_features and the embeddings are retuned by models that are already on device so they are on that device 
+
             image_embeddings = self.qformer_model(vgg_features)
+            
 
             loss = self.contrastive_loss(
                 image_embeddings,
@@ -99,8 +111,13 @@ class TrainQformer:
                 temperature=self.config["temperature"]
             )
             loss.backward()
-            self.optimizer.step()
 
+            torch.nn.utils.clip_grad_norm_(
+                            self.qformer_model.parameters(), 
+                            self.config["max_grad_norm"]
+                        )
+            self.optimizer.step()
+            self.optimizer.zero_grad()
             total_loss += loss.item()
             num_batches += 1
         return total_loss / num_batches 
@@ -108,13 +125,15 @@ class TrainQformer:
 
     def validate(self, dataloader):
         self.qformer_model.eval()
+        self.vgg_model.eval()
+        self.llmembedder_model.eval()
         
         total_loss = 0
         num_batches = 0
         
         with torch.no_grad():
             for batch in tqdm(dataloader, desc="Validation"):
-                xrays = batch['image'].to(self.device)
+                xrays = batch['image'].to(self.device, non_blocking=True)
                 reports = batch['report']
                 
                 vgg_features = self.vgg_model(xrays)
@@ -139,7 +158,9 @@ class TrainQformer:
             epoch = self.load_checkpoint(checkpoint_path) # models are class attributes , thei states are changed here 
             start_epoch = epoch + 1 # for example we save epoch 1 and we start directly from 2
             print(f"checkpoint laoded from : {checkpoint_path} and starting from epoch : ", start_epoch)
-        best_val_loss = float('inf')
+
+        if torch.cuda.is_available():
+            torch.backends.cudnn.benchmark = True
         for epoch in range(start_epoch, self.config["num_epochs"]):
             print(f"Epoch {epoch}/{self.config['num_epochs']}")
             train_loss = self.train_epoch(train_dataloader)
@@ -149,10 +170,11 @@ class TrainQformer:
                 val_loss = self.validate(val_dataloader)
                 print(f"Val Loss: {val_loss:.4f}")
                 
-                if val_loss < best_val_loss:
-                    best_val_loss = val_loss
+                if val_loss < self.best_val_loss:
+                    self.best_val_loss = val_loss
                     self.save_checkpoint(f"/content/drive/MyDrive/best_qformer_{epoch}.pth", epoch)
                     print(f"Saved best model for epoch {epoch}!")
+            del train_loss, val_loss
             
             print("-" * 50)
 

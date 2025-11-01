@@ -4,6 +4,7 @@ training:
   num_epochs: 50
   lr: 1.0e-4
   temperature: 0.07
+  max_grad_norm: 1.0
 
 model:
   LLM_MODEL_NAME: "emilyalsentzer/Bio_ClinicalBERT"

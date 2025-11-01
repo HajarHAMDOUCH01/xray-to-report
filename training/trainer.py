@@ -1,10 +1,13 @@
 """Main training script for Q-Former"""
-
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Suppress TensorFlow warnings
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
 import torch
 import yaml
 from torch.utils.data import DataLoader
 import sys
-import os
 import numpy as np
 from tqdm import tqdm
 
@@ -19,14 +22,11 @@ def create_collate_fn(skip_corrupted=True):
     """Create a collate function that filters out corrupted samples."""
     def collate_fn(batch):
         if skip_corrupted:
-            # Filter out corrupted samples
             valid_batch = [item for item in batch if not item.get('corrupted', False)]
             if not valid_batch:
-                # Return empty batch if all samples are corrupted
                 return None
             batch = valid_batch
         
-        # Default collation
         return torch.utils.data.default_collate(batch)
     
     return collate_fn
@@ -95,9 +95,9 @@ def setup_training(config_path="/content/xray-to-report/training/configs/config.
     
     print("Initializing trainer...")
     trainer = TrainQformer(
-        qformer=qformer,
-        vgg=vgg,
-        llmEmbedder=llm_embedder,
+        qformer=qformer.to(device),
+        vgg=vgg.to(device),
+        llmEmbedder=llm_embedder.to(device),
         training_config=training_config
     )
     
