@@ -137,7 +137,7 @@ class TrainQformer:
                 
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss
-                    self.save_checkpoint(f"best_qformer.pth")
+                    self.save_checkpoint(f"/content/drive/MyDrive/best_qformer_{epoch+1}.pth")
                     print("Saved best model!")
             
             print("-" * 50)
