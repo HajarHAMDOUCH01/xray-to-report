@@ -138,5 +138,5 @@ class HierarchicalXRayQformer(nn.Module):
         ) # -> (B, 96, 768) but they know eachother
 
         # Normalization 
-        return self.norm_layer(integrated_queries)
+        return self.norm_layer(integrated_queries) # normalization across the 768 feature !
     

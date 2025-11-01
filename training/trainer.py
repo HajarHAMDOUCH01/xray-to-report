@@ -1,0 +1,114 @@
+"""Main training script for Q-Former"""
+
+import torch
+import yaml
+from torch.utils.data import DataLoader
+import sys
+import os
+import numpy as np
+from tqdm import tqdm
+
+sys.path.append("")
+
+from models.vgg_net.features_extractor import VGG19
+from models.qformer.qformer import HierarchicalXRayQformer
+from models.text_encoder.embeddings_extractor import LLMEmbedder
+from training.trainer import TrainQformer
+from data.dataset import XRayReportDataset
+
+def setup_training(config_path="configs/train_config.yaml"):
+    
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    
+    training_config = config['training']
+    model_config = config['model']
+    data_config = config['data']
+    
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+    
+    print("Initializing VGG19...")
+    vgg = VGG19()
+    
+    print("Initializing ClinicalBERT...")
+    llm_embedder = LLMEmbedder(model_config)
+    
+    print("Initializing Q-Former...")
+    qformer = HierarchicalXRayQformer(
+        num_queries=model_config.get('num_queries', 32),
+        hidden_dim=model_config.get('hidden_dim', 768),
+        num_layers=model_config.get('num_layers', 6),
+        num_heads=model_config.get('num_heads', 12),
+        intermediate_size=model_config.get('intermediate_size', 3072),
+        dropout=model_config.get('dropout', 0.1)
+    )
+    
+    print("Loading datasets...")
+    train_dataset = XRayReportDataset(
+        data_root=data_config['data_root'],
+        split='train',
+        transform=None,
+        max_samples=data_config.get('max_samples')
+    )
+    
+    val_dataset = XRayReportDataset(
+        data_root=data_config['data_root'],
+        split='val', 
+        transform=None,
+        max_samples=data_config.get('max_samples')
+    )
+    
+    train_dataloader = DataLoader(
+        train_dataset,
+        batch_size=training_config['batch_size'],
+        shuffle=True,
+        num_workers=data_config.get('num_workers', 2),  
+        pin_memory=True
+    )
+    
+    val_dataloader = DataLoader(
+        val_dataset,
+        batch_size=training_config['batch_size'],
+        shuffle=False,
+        num_workers=data_config.get('num_workers', 2),
+        pin_memory=True
+    )
+    
+    print("Initializing trainer...")
+    trainer = TrainQformer(
+        qformer=qformer,
+        vgg=vgg,
+        llmEmbedder=llm_embedder,
+        training_config=training_config
+    )
+    
+    return trainer, train_dataloader, val_dataloader
+
+def main():
+    """Main training function"""
+    
+    trainer, train_dataloader, val_dataloader = setup_training()
+    
+    print("Starting training...")
+    print(f"Training samples: {len(train_dataloader.dataset)}")
+    print(f"Validation samples: {len(val_dataloader.dataset)}")
+    print(f"Batch size: {train_dataloader.batch_size}")
+    print(f"Number of epochs: {trainer.config['num_epochs']}")
+    print("-" * 50)
+    
+    try:
+        trainer.train(train_dataloader, val_dataloader)
+        print("Training completed successfully!")
+        
+    except KeyboardInterrupt:
+        print("\nTraining interrupted by user")
+        trainer.save_checkpoint("interrupted_training.pth")
+        print("Saved interrupted training checkpoint")
+    
+    except Exception as e:
+        print(f"Training failed with error: {e}")
+        raise
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,21 @@
+# Training configuration
+training:
+  batch_size: 16  
+  num_epochs: 50
+  lr: 1.0e-4
+  temperature: 0.07
+
+model:
+  LLM_MODEL_NAME: "emilyalsentzer/Bio_ClinicalBERT"
+  MAX_REPORT_LENGTH: 512
+  num_queries: 32
+  hidden_dim: 768
+  num_layers: 6
+  num_heads: 12
+  intermediate_size: 3072
+  dropout: 0.1
+
+data:
+  data_root: ""  
+  num_workers: 4
+  max_samples: null  
