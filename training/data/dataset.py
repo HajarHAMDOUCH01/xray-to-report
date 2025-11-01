@@ -16,6 +16,7 @@ class XRayReportDataset(Dataset):
         root_dir: Path to mimicDatatotal directory
         transform: Optional image transforms (if None, uses default)
         report_key: JSON key containing the report text (default: 'report')
+        skip_corrupted: Whether to skip corrupted images (default: True)
     """
     
     def __init__(
@@ -28,7 +29,8 @@ class XRayReportDataset(Dataset):
         max_samples: Optional[int] = None,
         train_ratio: float = 0.8,
         val_ratio: float = 0.1,
-        seed: int = 42
+        seed: int = 42,
+        skip_corrupted: bool = True
     ):
         # Support both root_dir and data_root parameters
         self.root_dir = Path(data_root if data_root else root_dir)
@@ -38,6 +40,7 @@ class XRayReportDataset(Dataset):
         self.train_ratio = train_ratio
         self.val_ratio = val_ratio
         self.seed = seed
+        self.skip_corrupted = skip_corrupted
         
         # Default transform for X-rays
         if transform is None:
@@ -93,11 +96,30 @@ class XRayReportDataset(Dataset):
                 json_file = folder / f"{base_name}.json"
                 
                 if json_file.exists():
-                    samples.append({
-                        'image_path': str(png_file),
-                        'json_path': str(json_file)
-                    })
+                    # Check if image is corrupted during indexing
+                    if self.skip_corrupted:
+                        try:
+                            # Try to open and verify the image
+                            with Image.open(png_file) as img:
+                                img.verify()  # Verify file integrity
+                            
+                            # If we get here, the image is valid
+                            samples.append({
+                                'image_path': str(png_file),
+                                'json_path': str(json_file)
+                            })
+                            
+                        except (IOError, OSError, Image.DecompressionBombError) as e:
+                            print(f"Warning: Skipping corrupted image {png_file}: {e}")
+                            continue  # Skip to next image in this folder
+                    else:
+                        # Add without checking
+                        samples.append({
+                            'image_path': str(png_file),
+                            'json_path': str(json_file)
+                        })
         
+        print(f"Found {len(samples)} valid samples for {self.split} split")
         return samples
     
     def _perform_split(self, samples):
@@ -138,31 +160,66 @@ class XRayReportDataset(Dataset):
         """
         sample = self.samples[idx]
         
-        # Load image
-        image = Image.open(sample['image_path']).convert('RGB')
-        if self.transform:
-            image = self.transform(image)
-        
-        # Load report from JSON
-        with open(sample['json_path'], 'r') as f:
-            data = json.load(f)
-            # Try multiple possible keys for the report text
-            report = data.get(self.report_key, "")
+        try:
+            # Load image with error handling
+            with Image.open(sample['image_path']) as img:
+                image = img.convert('RGB')
             
-            # Fallback to other common keys if empty
-            if not report:
-                for key in ['caption', 'report', 'findings', 'impression', 'text']:
-                    if key in data and data[key]:
-                        report = data[key]
-                        break
+            if self.transform:
+                image = self.transform(image)
             
-            # If still empty, log warning
-            if not report:
-                print(f"Warning: No text found in {sample['json_path']}")
-                report = ""
-        
-        return {
-            'image': image,
-            'report': report,
-            'image_path': sample['image_path']
-        }
+            # Load report from JSON
+            with open(sample['json_path'], 'r') as f:
+                data = json.load(f)
+                # Try multiple possible keys for the report text
+                report = data.get(self.report_key, "")
+                
+                # Fallback to other common keys if empty
+                if not report:
+                    for key in ['caption', 'report', 'findings', 'impression', 'text']:
+                        if key in data and data[key]:
+                            report = data[key]
+                            break
+                
+                # If still empty, log warning
+                if not report:
+                    print(f"Warning: No text found in {sample['json_path']}")
+                    report = ""
+            
+            return {
+                'image': image,
+                'report': report,
+                'image_path': sample['image_path']
+            }
+            
+        except (IOError, OSError, Image.DecompressionBombError, UnidentifiedImageError) as e:
+            if self.skip_corrupted:
+                print(f"Warning: Skipping corrupted sample {sample['image_path']}: {e}")
+                # Return a placeholder or recursively try the next sample
+                # For simplicity, we'll return a black image and empty report
+                # In practice, you might want to implement a retry mechanism
+                placeholder_image = torch.zeros(3, 224, 224) if self.transform else None
+                return {
+                    'image': placeholder_image,
+                    'report': "",
+                    'image_path': sample['image_path'],
+                    'corrupted': True  # Flag to identify corrupted samples
+                }
+            else:
+                # Re-raise the exception if we're not skipping corrupted files
+                raise
+    
+    def get_valid_samples_count(self):
+        """Get the number of valid (non-corrupted) samples."""
+        if not hasattr(self, '_valid_count'):
+            # Count samples that don't have the corrupted flag
+            self._valid_count = sum(1 for i in range(len(self.samples)) 
+                                  if not self._is_corrupted(i))
+        return self._valid_count
+    
+    def _is_corrupted(self, idx):
+        """Check if a sample is corrupted (internal method)."""
+        # This would need to be implemented based on your corruption detection logic
+        # For now, we'll assume all samples in the index are valid
+        # since we check during _build_index
+        return False

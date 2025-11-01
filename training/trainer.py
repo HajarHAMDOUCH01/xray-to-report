@@ -15,7 +15,21 @@ from models.qformer.qformer import HierarchicalXRayQformer
 from models.text_encoder.embeddings_extractor import LLMEmbedder
 from training.train import TrainQformer
 from data.dataset import XRayReportDataset
-
+def create_collate_fn(skip_corrupted=True):
+    """Create a collate function that filters out corrupted samples."""
+    def collate_fn(batch):
+        if skip_corrupted:
+            # Filter out corrupted samples
+            valid_batch = [item for item in batch if not item.get('corrupted', False)]
+            if not valid_batch:
+                # Return empty batch if all samples are corrupted
+                return None
+            batch = valid_batch
+        
+        # Default collation
+        return torch.utils.data.default_collate(batch)
+    
+    return collate_fn
 def setup_training(config_path="/content/xray-to-report/training/configs/config.yaml"):
     
     with open(config_path, 'r') as f:
@@ -66,6 +80,7 @@ def setup_training(config_path="/content/xray-to-report/training/configs/config.
         batch_size=training_config['batch_size'],
         shuffle=True,
         num_workers=data_config.get('num_workers', 2),  
+        collate_fn=create_collate_fn(skip_corrupted=True),
         pin_memory=True
     )
 
@@ -74,6 +89,7 @@ def setup_training(config_path="/content/xray-to-report/training/configs/config.
         batch_size=training_config['batch_size'],
         shuffle=False,
         num_workers=data_config.get('num_workers', 2),
+        collate_fn=create_collate_fn(skip_corrupted=True),
         pin_memory=True
     )
     
