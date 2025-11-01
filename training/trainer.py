@@ -116,7 +116,7 @@ def main():
     print("-" * 50)
     
     try:
-        trainer.train(train_dataloader, val_dataloader)
+        trainer.train(train_dataloader, val_dataloader, checkpoint_path=None)
         print("Training completed successfully!")
         
     except KeyboardInterrupt:
