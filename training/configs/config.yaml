@@ -1,6 +1,6 @@
 # Training configuration
 training:
-  batch_size: 16  
+  batch_size: 32
   num_epochs: 50
   lr: 1.0e-4
   temperature: 0.07
@@ -18,5 +18,5 @@ model:
 
 data:
   data_root: "/root/.cache/kagglehub/datasets/hajarhamdouch/mimic-dataset-30k-xray-reports/versions/2/mimicDatatotal (1)"  
-  num_workers: 4
+  num_workers: 2
   max_samples: null  

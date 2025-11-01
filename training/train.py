@@ -69,9 +69,8 @@ class TrainQformer:
         checkpoint = torch.load(path)
         self.qformer_model.load_state_dict(checkpoint['qformer_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        # epoch = checkpoint['epoch']
-        # return epoch
-        return 1
+        epoch = checkpoint['epoch']
+        return epoch
     
     def train_epoch(self, dataloader):
         # initializing vgg and text encoder 
@@ -84,20 +83,15 @@ class TrainQformer:
         total_loss = 0
         num_batches = 0
 
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-
         for batch in tqdm(dataloader, desc="Training"):
-            xrays = batch['image'].to(self.device, non_blocking=True) # the image is a tensor , so it's moved to gpu 
+            xrays = batch['image'].to(self.device) # the image is a tensor , so it's moved to gpu 
             reports = batch['report']
             # print(reports)
 
             self.optimizer.zero_grad()
 
             with torch.no_grad():
-                assert xrays.device == self.vgg_model.weight.device , "xrays and vgg should be in the same device !"
                 vgg_features = self.vgg_model(xrays)
-                assert xrays.device == self.vgg_model.weight.device , "xrays and vgg should be in the same device !"
                 text_embeddings = self.llmembedder_model(reports)
 
                 # now vgg_features and the embeddings are retuned by models that are already on device so they are on that device 
@@ -117,7 +111,6 @@ class TrainQformer:
                             self.config["max_grad_norm"]
                         )
             self.optimizer.step()
-            self.optimizer.zero_grad()
             total_loss += loss.item()
             num_batches += 1
         return total_loss / num_batches 
@@ -133,7 +126,7 @@ class TrainQformer:
         
         with torch.no_grad():
             for batch in tqdm(dataloader, desc="Validation"):
-                xrays = batch['image'].to(self.device, non_blocking=True)
+                xrays = batch['image'].to(self.device)
                 reports = batch['report']
                 
                 vgg_features = self.vgg_model(xrays)
