@@ -1,74 +1,140 @@
-import torch
-from torch.utils.data import Dataset
-from PIL import Image
 import os
 import json
-import numpy as np
+from pathlib import Path
+from typing import Optional, Callable, Tuple
+from PIL import Image
+import torch
+from torch.utils.data import Dataset
+from torchvision import transforms
+
 
 class XRayReportDataset(Dataset):
-    def __init__(self, data_root, split='train', transform=None, max_samples=None):
-        """
-        Args:
-            data_root: path to mimicDatatotal folder
-            split: 'train', 'val', or 'test'
-            transform: image transforms
-            max_samples: for debugging, limit dataset size
-        """
-        self.data_root = data_root
-        self.transform = transform
+    
+    def __init__(
+        self, 
+        root_dir: str = None,
+        data_root: str = None,
+        split: str = 'train',
+        transform: Optional[Callable] = None,
+        report_key: str = 'caption',
+        max_samples: Optional[int] = None,
+        train_ratio: float = 0.8,
+        val_ratio: float = 0.1,
+        seed: int = 42
+    ):
+        self.root_dir = Path(data_root if data_root else root_dir)
         self.split = split
+        self.report_key = report_key
+        self.max_samples = max_samples
+        self.train_ratio = train_ratio
+        self.val_ratio = val_ratio
+        self.seed = seed
         
-        self.sample_folders = [f for f in os.listdir(data_root) 
-                             if os.path.isdir(os.path.join(data_root, f))]
-        self.sample_folders.sort()
+        if transform is None:
+            self.transform = transforms.Compose([
+                transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406], 
+                                   std=[0.229, 0.224, 0.225])
+            ])
+        else:
+            self.transform = transform
         
-        if max_samples:
-            self.sample_folders = self.sample_folders[:max_samples]
+        all_samples = self._build_index()
         
-        total_samples = len(self.sample_folders)
-        train_end = int(0.8 * total_samples)
-        val_end = int(0.9 * total_samples)
+        split_dir = self.root_dir / self.split
+        if not split_dir.exists():
+            all_samples = self._perform_split(all_samples)
         
-        if split == 'train':
-            self.sample_folders = self.sample_folders[:train_end]
-        elif split == 'val':
-            self.sample_folders = self.sample_folders[train_end:val_end]
-        elif split == 'test':
-            self.sample_folders = self.sample_folders[val_end:]
+        self.samples = all_samples
         
-        print(f"{split} dataset: {len(self.sample_folders)} samples")
+        if self.max_samples is not None:
+            self.samples = self.samples[:self.max_samples]
     
-    def __len__(self):
-        return len(self.sample_folders)
+    def _build_index(self):
+        """Build index of all image-report pairs for the specified split."""
+        samples = []
+        
+        split_dir = self.root_dir / self.split
+        if split_dir.exists():
+            search_dir = split_dir
+        else:
+            search_dir = self.root_dir
+        
+        for folder in sorted(search_dir.iterdir()):
+            if not folder.is_dir():
+                continue
+            
+            png_files = list(folder.glob("*.png"))
+            json_files = list(folder.glob("*.json"))
+            
+            for png_file in png_files:
+                base_name = png_file.stem  # e.g., "00000"
+                json_file = folder / f"{base_name}.json"
+                
+                if json_file.exists():
+                    samples.append({
+                        'image_path': str(png_file),
+                        'json_path': str(json_file)
+                    })
+        
+        return samples
     
-    def __getitem__(self, idx):
-        folder_name = self.sample_folders[idx]
-        folder_path = os.path.join(self.data_root, folder_name)
+    def _perform_split(self, samples):
+        """Split samples into train/val/test sets."""
+        import random
         
-        json_path = os.path.join(folder_path, f"{folder_name}.json")
-        with open(json_path, 'r') as f:
-            data = json.load(f)
+        random.seed(self.seed)
         
-        report_text = ""
-        for field in ['findings', 'impression', 'comparison']:
-            if field in data and data[field]:
-                report_text += data[field] + " "
+        shuffled = samples.copy()
+        random.shuffle(shuffled)
         
-        report_text = report_text.strip()
-        if not report_text:  
-            report_text = "No findings reported."
+        total = len(shuffled)
+        train_size = int(total * self.train_ratio)
+        val_size = int(total * self.val_ratio)
         
-        image_path = os.path.join(folder_path, f"{folder_name}.png")
-        image = Image.open(image_path).convert('RGB')
+        if self.split == 'train':
+            return shuffled[:train_size]
+        elif self.split == 'val':
+            return shuffled[train_size:train_size + val_size]
+        elif self.split == 'test':
+            return shuffled[train_size + val_size:]
+        else:
+            raise ValueError(f"Unknown split: {self.split}. Use 'train', 'val', or 'test'.")
+    
+    def __len__(self) -> int:
+        return len(self.samples)
+    
+    def __getitem__(self, idx: int) -> dict:
+        """
+        Returns:
+            dict with keys:
+                - 'image': Transformed image tensor
+                - 'report': Medical report text
+                - 'image_path': Path to image (for debugging)
+        """
+        sample = self.samples[idx]
         
+        image = Image.open(sample['image_path']).convert('RGB')
         if self.transform:
             image = self.transform(image)
-        else:
-            image = torch.tensor(np.array(image)).permute(2, 0, 1).float()
-            image = (image / 127.5) - 1.0  # [0,255] -> [-1,1]
+        
+        with open(sample['json_path'], 'r') as f:
+            data = json.load(f)
+            report = data.get(self.report_key, "")
+            
+            if not report:
+                for key in ['caption', 'report', 'findings', 'impression', 'text']:
+                    if key in data and data[key]:
+                        report = data[key]
+                        break
+            
+            if not report:
+                print(f"Warning: No text found in {sample['json_path']}")
+                report = ""
         
         return {
             'image': image,
-            'report': report_text,
-            'sample_id': folder_name
+            'report': report,
+            'image_path': sample['image_path']
         }

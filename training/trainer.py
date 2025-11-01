@@ -8,15 +8,15 @@ import os
 import numpy as np
 from tqdm import tqdm
 
-sys.path.append("")
+sys.path.append("/content/xray-to-report")
 
 from models.vgg_net.features_extractor import VGG19
 from models.qformer.qformer import HierarchicalXRayQformer
 from models.text_encoder.embeddings_extractor import LLMEmbedder
-from training.trainer import TrainQformer
+from training.train import TrainQformer
 from data.dataset import XRayReportDataset
 
-def setup_training(config_path="configs/train_config.yaml"):
+def setup_training(config_path="/content/xray-to-report/training/configs/config.yaml"):
     
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
@@ -48,17 +48,19 @@ def setup_training(config_path="configs/train_config.yaml"):
     train_dataset = XRayReportDataset(
         data_root=data_config['data_root'],
         split='train',
-        transform=None,
-        max_samples=data_config.get('max_samples')
+        train_ratio=0.8,
+        val_ratio=0.1,
     )
-    
+
     val_dataset = XRayReportDataset(
         data_root=data_config['data_root'],
-        split='val', 
+        split='val',
+        train_ratio=0.8,  
+        val_ratio=0.1,    
         transform=None,
         max_samples=data_config.get('max_samples')
     )
-    
+
     train_dataloader = DataLoader(
         train_dataset,
         batch_size=training_config['batch_size'],
@@ -66,7 +68,7 @@ def setup_training(config_path="configs/train_config.yaml"):
         num_workers=data_config.get('num_workers', 2),  
         pin_memory=True
     )
-    
+
     val_dataloader = DataLoader(
         val_dataset,
         batch_size=training_config['batch_size'],

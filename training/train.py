@@ -13,7 +13,7 @@ from torch.optim import AdamW
 import torch
 import sys 
 
-sys.path.append("")
+sys.path.append("/content/xray-to-report")
 from models.vgg_net.features_extractor import VGG19
 from models.qformer.qformer import HierarchicalXRayQformer
 from models.text_encoder.embeddings_extractor import LLMEmbedder
@@ -39,8 +39,8 @@ class TrainQformer:
         self.optimizer = AdamW(self.qformer_model.parameters(), lr=training_config["lr"])
 
     def contrastive_loss(self, image_features, text_embeddings, temperature=0.07):
-        print("DEBUG image shape:", image_features.shape)
-        print("DEBUG text shape:", text_embeddings.shape)
+        # print("DEBUG image shape:", image_features.shape)
+        # print("DEBUG text shape:", text_embeddings.shape)
 
         if len(image_features.shape) == 3:
             image_features = image_features.mean(dim=1)
@@ -74,6 +74,7 @@ class TrainQformer:
         for batch in tqdm(dataloader, desc="Training"):
             xrays = batch['image'].to(self.device)
             reports = batch['report']
+            # print(reports)
 
             self.optimizer.zero_grad()
 
@@ -107,14 +108,11 @@ class TrainQformer:
                 xrays = batch['image'].to(self.device)
                 reports = batch['report']
                 
-                # Extract features
                 vgg_features = self.vgg_model(xrays)
                 text_embeddings = self.llmembedder_model(reports)
                 
-                # Q-Former forward
                 image_embeddings = self.qformer_model(vgg_features)
                 
-                # Compute loss
                 loss = self.contrastive_loss(
                     image_embeddings, 
                     text_embeddings,
@@ -130,16 +128,13 @@ class TrainQformer:
         best_val_loss = float('inf')
         for epoch in range(self.config["num_epochs"]):
             print(f"Epoch {epoch+1}/{self.config['num_epochs']}")
-            # Training
             train_loss = self.train_epoch(train_dataloader)
             print(f"Train Loss: {train_loss:.4f}")
 
-            # Validation
             if val_dataloader is not None:
                 val_loss = self.validate(val_dataloader)
                 print(f"Val Loss: {val_loss:.4f}")
                 
-                # Save best model
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss
                     self.save_checkpoint(f"best_qformer.pth")

@@ -66,4 +66,10 @@ class VGG19(nn.Module):
         h4 = self.slice4(h3)
         h5 = self.slice5(h4)
 
-        return [h3, h4, h5] # conv3_4 (56,56,256) , conv4_4(28,28,512) , conv5_4(14,14,512)
+        return {
+            'conv_3': h3,  # (B, 256, H, W)
+            'conv_4': h4,  # (B, 512, H, W)
+            'conv_5': h5   # (B, 512, H, W)
+        }
+
+        # return [h3, h4, h5] # conv3_4 (56,56,256) , conv4_4(28,28,512) , conv5_4(14,14,512)

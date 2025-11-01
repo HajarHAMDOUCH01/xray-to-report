@@ -16,6 +16,6 @@ model:
   dropout: 0.1
 
 data:
-  data_root: ""  
+  data_root: "/root/.cache/kagglehub/datasets/hajarhamdouch/mimic-dataset-30k-xray-reports/versions/2/mimicDatatotal (1)"  
   num_workers: 4
   max_samples: null  

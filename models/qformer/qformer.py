@@ -69,7 +69,8 @@ class HierarchicalXRayQformer(nn.Module):
             hidden_dropout_prob=dropout, #  The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
             attention_probs_dropout_prob=dropout,
             add_cross_attention=True,
-            is_decoder=False,
+            is_decoder=True,             
+            is_encoder_decoder=False, 
         )
         qformer = BertModel(config)
         return nn.ModuleDict({
@@ -117,7 +118,7 @@ class HierarchicalXRayQformer(nn.Module):
         """
         queries_conv_3 = self.process_single_scale(vgg_features['conv_3'], 
                             self.q_former_conv3_4,
-                            self.projc_layer_3_3,
+                            self.projc_layer_3_4,
                             3
                             )
         queries_conv_4 = self.process_single_scale(vgg_features['conv_4'],

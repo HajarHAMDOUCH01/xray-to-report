@@ -8,7 +8,7 @@ from models.vgg_net.features_extractor import VGG19
 from models.text_encoder.embeddings_extractor import LLMEmbedder
 
 print("Testing dataset...")
-dataset = XRayReportDataset(data_root="mimicDatatotal", max_samples=10)
+dataset = XRayReportDataset(data_root="/root/.cache/kagglehub/datasets/hajarhamdouch/mimic-dataset-30k-xray-reports/versions/2/mimicDatatotal (1)", max_samples=10)
 sample = dataset[0]
 print(f"Image shape: {sample['image'].shape}")
 print(f"Report: {sample['report'][:100]}...")
