@@ -22,13 +22,6 @@ from models.text_encoder.embeddings_extractor import LLMEmbedder
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# training_config = {
-#     "batch_size" : 32,
-#     "num_epochs" : 50,
-#     "lr" : 1e-4,
-#     "temperature" : 0.07
-# }
-
 class TrainQformer:
     def __init__(self, qformer, vgg, llmEmbedder, training_config):
         self.qformer_model = qformer.to(device)
