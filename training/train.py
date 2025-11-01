@@ -62,7 +62,7 @@ class TrainQformer:
         torch.save({
             'qformer_state_dict': self.qformer_model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
-            'epoch' : epoch+1,
+            'epoch' : epoch,
             'config': self.config
         }, path)
     
@@ -70,8 +70,9 @@ class TrainQformer:
         checkpoint = torch.load(path)
         self.qformer_model.load_state_dict(checkpoint['qformer_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        epoch = checkpoint['epoch']
-        return epoch
+        # epoch = checkpoint['epoch']
+        # return epoch
+        return 1
     
     def train_epoch(self, dataloader):
         # initializing vgg and text encoder 
@@ -140,14 +141,14 @@ class TrainQformer:
         return total_loss / num_batches
     
     def train(self, train_dataloader, val_dataloader=None, checkpoint_path=None):
-        start_epoch = 0
+        start_epoch = 1
         if checkpoint_path is not None and os.path.exists(checkpoint_path):
             epoch = self.load_checkpoint(checkpoint_path) # models are class attributes , thei states are changed here 
-            start_epoch = epoch+1 # for example we save epoch 1 and we start directly from 2
+            start_epoch = epoch + 1 # for example we save epoch 1 and we start directly from 2
             print(f"checkpoint laoded from : {checkpoint_path} and starting from epoch : ", start_epoch)
         best_val_loss = float('inf')
         for epoch in range(start_epoch, self.config["num_epochs"]):
-            print(f"Epoch {epoch+1}/{self.config['num_epochs']}")
+            print(f"Epoch {epoch}/{self.config['num_epochs']}")
             train_loss = self.train_epoch(train_dataloader)
             print(f"Train Loss: {train_loss:.4f}")
 
@@ -157,8 +158,8 @@ class TrainQformer:
                 
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss
-                    self.save_checkpoint(f"/content/drive/MyDrive/best_qformer_{epoch+1}.pth")
-                    print(f"Saved best model for epoch {epoch+1}!")
+                    self.save_checkpoint(f"/content/drive/MyDrive/best_qformer_{epoch}.pth", epoch)
+                    print(f"Saved best model for epoch {epoch}!")
             
             print("-" * 50)
 
